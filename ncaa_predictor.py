@@ -2,10 +2,13 @@ from __future__ import division
 import pandas as pd
 from lookup_kaggle_to_kenpom import team_lookup as kag_to_kp
 from lookup_kenpom_to_kaggle import team_lookup as kp_to_kag
+from lookup_kaggle_to_BlakeData import team_lookup as kag_to_bd
+from lookup_BlakeData_to_kaggle import team_lookup as bd_to_kag
 import re
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 import numpy as np
+from scipy.stats import nanmean,nanstd
 from nltk import edit_distance
 
 
@@ -16,7 +19,12 @@ class PredictNCAA():
         self.teams_kaggle = pd.read_csv('./teams.csv')
         self.feature_names = ['Rank','Pyth','AdjO','AdjOR','AdjD','AdjDR',
                             'AdjT','AdjTR','Luck','LuckR','PythSOS','PythSOSR',
-                            'OppO','OppOR','OppD','OppDR','PythNCSOS','PythNCSOSR']
+                            'OppO','OppOR','OppD','OppDR','PythNCSOS','PythNCSOSR',
+                            'Win %','SRS','SOS','Conf Win %','Home Win %','Away Win %',
+                            'Points Scored','Points Against','FG','FGA','FG%','3P',
+                            '3PA','3P%','FT','FTA','FT%','TRB','AST','STL','BLK',
+                            'TOV','PF','FTr','3PAr','TS%','TRB%','AST%','BLK%',
+                            'eFG%','TOV%','FT/FGA']
    
     #Stores all data into dictionary____________________________________________
     def load_data(self):
@@ -40,7 +48,28 @@ class PredictNCAA():
                 else:
                     #print name+" not found in year "+str(year)
                     pass
-      
+                    
+    def load_blakeData(self):
+        blakeDataAll = pd.read_csv('BlakeData.csv')
+        blakeDataAll.Team = blakeDataAll.Team.apply(lambda x: re.sub(r'[0-9]*','',str(x)).strip().strip('.'))
+        for year in range(2003,2015):
+            blakeData = blakeDataAll[blakeDataAll['Year']==year]
+            for id in self.teams_kaggle.id:
+                if id in self.all_data[year].keys():
+                    name = kag_to_bd[self.teams_kaggle.name[self.teams_kaggle.id==int(id)].item()]
+                    if isinstance(name,list): name = name[0]
+                    if len(blakeData.Team[blakeData.Team==name]) == 0 and isinstance(kag_to_bd[self.teams_kaggle.name[self.teams_kaggle.id==int(id)].item()],list): 
+                        name = kag_to_bd[self.teams_kaggle.name[self.teams_kaggle.id==int(id)].item()][1]
+                    if len(blakeData.Team[blakeData.Team==name]) == 0: 
+                        name = self.teams_kaggle.name[self.teams_kaggle.id==int(id)].item()
+                    if len(blakeData.Team[blakeData.Team==name]) != 0:
+                        for column_name in blakeData.columns:
+                            if column_name not in {"ORB","Year","Team"}:
+                                self.all_data[year][id][column_name]=blakeData[column_name][blakeData['Year']==year][blakeData['Team']==name].item()
+                    else:
+                        #print name+" not found in year "+str(year)
+                        pass
+                    
     #Calculates standardized features over full data____________________________              
     def standardize_feats(self):
         self.means = {}
@@ -49,23 +78,28 @@ class PredictNCAA():
             all_vals = []
             for year in self.all_data.keys():
                 for teamid in self.all_data[year].keys():
-                    all_vals.append(float(self.all_data[year][teamid][feat]))
-            self.means[feat] = np.mean(all_vals)
-            self.stdevs[feat] = np.std(all_vals)
+                    if teamid in self.all_data[year].keys():
+                        if feat in self.all_data[year][teamid].keys():
+                            all_vals.append(float(self.all_data[year][teamid][feat]))
+            self.means[feat] = nanmean(all_vals)
+            self.stdevs[feat] = nanstd(all_vals)
        
     #Used to find the teamname with smallest edit distance______________________ 
     def get_teamname(self,teamname):
         try:
             return kp_to_kag[teamname]
         except KeyError:
-            name,val = '',100
-            for team in self.teams_kaggle.name:
-                newval = edit_distance(team,teamname)
-                if newval < val:
-                    name = team
-                    val = newval
-            return name
-        
+            try:
+                return bd_to_kag[teamname]
+            except KeyError:
+                name,val = '',100
+                for team in self.teams_kaggle.name:
+                    newval = edit_distance(team,teamname)
+                    if newval < val:
+                        name = team
+                        val = newval
+                return name
+            
     #Trains a Logistic Regression model_________________________________________                
     def training_testing_split(self):
         X = []
@@ -154,6 +188,7 @@ if __name__ == '__main__':
 
     a = PredictNCAA()
     a.load_data()
+    a.load_blakeData()
     a.standardize_feats()
     a.training_testing_split()
     a.train_LR()
