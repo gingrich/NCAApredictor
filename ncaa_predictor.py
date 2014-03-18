@@ -126,13 +126,13 @@ class PredictNCAA():
                     #game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
                     if num_ones > num_zeros:
                         if team1wins:
-                            game_feats = team2feats + team1feats
+                            game_feats = [team2feats[i] - team1feats[i] for i in range(len(team1feats))]
                             actual_label = 0
                         else:
-                            game_feats = team1feats + team2feats
+                            game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
                             actual_label = 0
                     else: 
-                        game_feats = team1feats + team2feats
+                        game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
                         actual_label = team1wins
                     if actual_label: num_ones += 1
                     else: num_zeros += 1
@@ -179,8 +179,8 @@ class PredictNCAA():
                             for x in self.feature_names]
         team2feats = [(float(self.all_data[year][team2id][x]) - self.means[x])/self.stdevs[x]
                             for x in self.feature_names]
-        #game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
-        game_feats = team1feats + team2feats
+        game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
+        #game_feats = team1feats + team2feats
         pred = classifier.predict_proba(game_feats)
         return pred
 
