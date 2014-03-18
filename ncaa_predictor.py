@@ -10,7 +10,8 @@ from sklearn.svm import SVC
 import numpy as np
 from scipy.stats import nanmean,nanstd
 from nltk import edit_distance
-
+from sklearn.cross_validation import StratifiedKFold
+from sklearn.grid_search import GridSearchCV
 
 class PredictNCAA():
     
@@ -140,31 +141,33 @@ class PredictNCAA():
                     X.append(game_feats)
                     y.append(actual_label)
         N = int(.7*len(X))
+        self.X_full = X
+        self.y_full = y
         self.X_train = X[:N]
         self.y_train = y[:N]
         self.X_test = X[N:]
         self.y_test = y[N:]
            
-    def train_LR(self):             
+    def train_LR(self,X,y):             
         self.LR = LogisticRegression(fit_intercept = False)
-        self.LR.fit(self.X_train,self.y_train)
+        self.LR.fit(X,y)
         
-    def train_SVC(self):
-        self.SVC = SVC(probability=True)
-        self.SVC.fit(self.X_train,self.y_train)
+    def train_SVC(self,X,y):
+        self.SVC = SVC(probability=True,C=1e5,gamma=1e-5)
+        self.SVC.fit(X,y)
                 
-    def test(self,classifier):
-        print classifier.score(self.X_test,self.y_test)
+    def test(self,classifier,X,y):
+        print classifier.score(X,y)
         
-    def logloss(self,classifier):
-        pred = classifier.predict_proba(self.X_test)
+    def logloss(self,classifier,X,y):
+        pred = classifier.predict_proba(X)
         s = 0
         for p in range(len(pred)):
             prob_one = pred[p][1]
             prob_zero = pred[p][0]
-            truth = self.y_test[p]
+            truth = y[p]
             s += (truth*np.log(prob_one) + (1-truth)*np.log(prob_zero))
-        print -s/len(self.y_test)
+        print -s/len(y)
             
     #Predicts the probabilistic outcome of a single game________________________
     def predict_game(self,team1name,team2name,classifier):
@@ -183,6 +186,27 @@ class PredictNCAA():
         #game_feats = team1feats + team2feats
         pred = classifier.predict_proba(game_feats)
         return pred
+        
+    def process_tournament(self,gameid,classifier):
+        team1id = int(gameid.split('_')[1])
+        team2id = int(gameid.split('_')[-1])
+        year=2014
+        team1feats = [(float(self.all_data[year][team1id][x]) - self.means[x])/self.stdevs[x] 
+                    for x in self.feature_names]
+        team2feats = [(float(self.all_data[year][team2id][x]) - self.means[x])/self.stdevs[x]
+                            for x in self.feature_names]
+        game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
+        pred = classifier.predict_proba(game_feats)
+        return pred[0][1]
+        
+    def tune_SVC():
+        C_range = 10.0 ** np.arange(-2, 9)
+        gamma_range = 10.0 ** np.arange(-5, 4)
+        param_grid = dict(gamma=gamma_range, C=C_range)
+        cv = StratifiedKFold(y=a.y_full, n_folds=3)
+        grid = GridSearchCV(a.SVC, param_grid=param_grid, cv=cv)
+        grid.fit(a.X_full, a.y_full)
+        print("The best classifier is: ", grid.best_estimator_)
 
 if __name__ == '__main__':
 
@@ -191,12 +215,12 @@ if __name__ == '__main__':
     a.load_blakeData()
     a.standardize_feats()
     a.training_testing_split()
-    a.train_LR()
-    a.train_SVC()
-    a.test(a.SVC)
-    a.test(a.LR)
-    a.logloss(a.SVC)
-    a.logloss(a.LR)
+    a.train_LR(a.X_full,a.y_full)
+    a.train_SVC(a.X_full,a.y_full)
+    a.test(a.SVC,a.X_test,a.y_test)
+    a.test(a.LR,a.X_test,a.y_test)
+    a.logloss(a.SVC,a.X_test,a.y_test)
+    a.logloss(a.LR,a.X_test,a.y_test)
         
     team1 = 'Wisconsin'
     team2 = 'Florida'
@@ -205,3 +229,8 @@ if __name__ == '__main__':
     print ("{team1}: %0.2f"%(pred[1]*100)).format(team1=team1)+"%"
     print ("{team2}: %0.2f"%(pred[0]*100)).format(team2=team2)+"%"
 
+    submit = pd.read_csv('sample_submission.csv')
+    submit.pred = submit.id.apply(lambda x: a.process_tournament(x,a.LR))
+    submit.to_csv('submission_LR.csv',index=False)
+    submit.pred = submit.id.apply(lambda x: a.process_tournament(x,a.SVC))
+    submit.to_csv('submission_SVC.csv',index=False)
