@@ -72,6 +72,8 @@ class PredictNCAA():
         y = []
         for year in range(2003,2013):
             with open('./%s_tour.csv'%str(year),'r') as f:
+                num_zeros = 0
+                num_ones = 0
                 for line in f:
                     line = line.split(',')
                     team1 = line[0]
@@ -83,13 +85,26 @@ class PredictNCAA():
                     if team2 not in self.teams_kaggle.name.values:
                         team2 = self.get_teamname(team2)
                     team2id = self.teams_kaggle.id[self.teams_kaggle.name==team2].values[0]
-                    team1feats = [(float(self.all_data[year][team1id][x]) - self.means[x])/self.stdevs[x] 
+                    team1feats = [(float(self.all_data[year][team1id][x]) - self.means[x])/self.stdevs[x]
                                                     for x in self.feature_names]
                     team2feats = [(float(self.all_data[year][team2id][x]) - self.means[x])/self.stdevs[x]
                                                     for x in self.feature_names]
-                    game_feats = team1feats + team2feats
+                    #game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
+                    if num_ones > num_zeros:
+                        if team1wins:
+                            game_feats = team2feats + team1feats
+                            actual_label = 0
+                        else:
+                            game_feats = team1feats + team2feats
+                            actual_label = 0
+                    else: 
+                        game_feats = team1feats + team2feats
+                        actual_label = team1wins
+                    if actual_label: num_ones += 1
+                    else: num_zeros += 1
+                            
                     X.append(game_feats)
-                    y.append(team1wins)
+                    y.append(actual_label)
         N = int(.7*len(X))
         self.X_train = X[:N]
         self.y_train = y[:N]
@@ -117,8 +132,6 @@ class PredictNCAA():
             s += (truth*np.log(prob_one) + (1-truth)*np.log(prob_zero))
         print -s/len(self.y_test)
             
-        
-        
     #Predicts the probabilistic outcome of a single game________________________
     def predict_game(self,team1name,team2name,classifier):
         if team1name not in self.teams_kaggle.name.values:
@@ -132,8 +145,9 @@ class PredictNCAA():
                             for x in self.feature_names]
         team2feats = [(float(self.all_data[year][team2id][x]) - self.means[x])/self.stdevs[x]
                             for x in self.feature_names]
-        x = team1feats + team2feats
-        pred = classifier.predict_proba(x)
+        #game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
+        game_feats = team1feats + team2feats
+        pred = classifier.predict_proba(game_feats)
         return pred
 
 if __name__ == '__main__':
@@ -149,8 +163,8 @@ if __name__ == '__main__':
     a.logloss(a.SVC)
     a.logloss(a.LR)
         
-    team1 = 'Washington'
-    team2 = 'UCLA'
+    team2 = 'Pittsburgh'
+    team1 = 'Colorado'
     pred = a.predict_game(team1,team2,a.SVC)[0]
     print "Percent chances of winning:"
     print ("{team1}: %0.2f"%(pred[1]*100)).format(team1=team1)+"%"
