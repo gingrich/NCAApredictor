@@ -130,7 +130,7 @@ class PredictNCAA():
                             actual_label = 0
                         else:
                             game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
-                            actual_label = 0
+                            actual_label = team1wins
                     else: 
                         game_feats = [team1feats[i] - team2feats[i] for i in range(len(team1feats))]
                         actual_label = team1wins
@@ -146,7 +146,7 @@ class PredictNCAA():
         self.y_test = y[N:]
            
     def train_LR(self):             
-        self.LR = LogisticRegression()
+        self.LR = LogisticRegression(fit_intercept = False)
         self.LR.fit(self.X_train,self.y_train)
         
     def train_SVC(self):
@@ -198,9 +198,9 @@ if __name__ == '__main__':
     a.logloss(a.SVC)
     a.logloss(a.LR)
         
-    team2 = 'Pittsburgh'
-    team1 = 'Colorado'
-    pred = a.predict_game(team1,team2,a.SVC)[0]
+    team1 = 'Wisconsin'
+    team2 = 'Florida'
+    pred = a.predict_game(team1,team2,a.LR)[0]
     print "Percent chances of winning:"
     print ("{team1}: %0.2f"%(pred[1]*100)).format(team1=team1)+"%"
     print ("{team2}: %0.2f"%(pred[0]*100)).format(team2=team2)+"%"
