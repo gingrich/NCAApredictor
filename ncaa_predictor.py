@@ -7,6 +7,7 @@ from lookup_BlakeData_to_kaggle import team_lookup as bd_to_kag
 import re
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 from scipy.stats import nanmean,nanstd
 from nltk import edit_distance
@@ -16,7 +17,6 @@ from sklearn.grid_search import GridSearchCV
 class PredictNCAA():
     
     def __init__(self):
-        self.year_lookup = {'N':'2009','O':'2010','P':'2011','Q':'2012','R':'2013'}
         self.teams_kaggle = pd.read_csv('./teams.csv')
         self.feature_names = ['Rank','Pyth','AdjO','AdjOR','AdjD','AdjDR',
                             'AdjT','AdjTR','Luck','LuckR','PythSOS','PythSOSR',
@@ -155,6 +155,10 @@ class PredictNCAA():
     def train_SVC(self,X,y):
         self.SVC = SVC(probability=True,C=1e5,gamma=1e-5)
         self.SVC.fit(X,y)
+
+    def train_RF(self,X,y):
+        self.RF = RandomForestClassifier(n_estimators=10,max_features=6,min_samples_split=10)
+        self.RF.fit(X,y)
                 
     def test(self,classifier,X,y):
         print classifier.score(X,y)
@@ -208,6 +212,16 @@ class PredictNCAA():
         grid.fit(a.X_full, a.y_full)
         print("The best classifier is: ", grid.best_estimator_)
 
+    def tune_RF():
+        min_samples = np.arange(1,10)
+        max_features = np.arange(3,15)
+        param_grid = dict(min_samples_split=min_samples,
+                            max_features=max_features)
+        cv = StratifiedKFold(y=a.y_full, n_folds=10)
+        grid = GridSearchCV(a.RF, param_grid=param_grid, cv=cv)
+        grid.fit(a.X_full, a.y_full)
+        print("The best classifier is: ", grid.best_estimator_)
+
 if __name__ == '__main__':
 
     a = PredictNCAA()
@@ -215,22 +229,25 @@ if __name__ == '__main__':
     a.load_blakeData()
     a.standardize_feats()
     a.training_testing_split()
-    a.train_LR(a.X_full,a.y_full)
-    a.train_SVC(a.X_full,a.y_full)
+    a.train_LR(a.X_train,a.y_train)
+    a.train_SVC(a.X_train,a.y_train)
+    a.train_RF(a.X_train,a.y_train)
     a.test(a.SVC,a.X_test,a.y_test)
     a.test(a.LR,a.X_test,a.y_test)
+    a.test(a.RF,a.X_test,a.y_test)
     a.logloss(a.SVC,a.X_test,a.y_test)
     a.logloss(a.LR,a.X_test,a.y_test)
+    a.logloss(a.RF,a.X_test,a.y_test)
         
-    team1 = 'Wisconsin'
-    team2 = 'Florida'
-    pred = a.predict_game(team1,team2,a.LR)[0]
+    team1 = 'Wichita St'
+    team2 = 'Arizona'
+    pred = a.predict_game(team1,team2,a.RF)[0]
     print "Percent chances of winning:"
     print ("{team1}: %0.2f"%(pred[1]*100)).format(team1=team1)+"%"
     print ("{team2}: %0.2f"%(pred[0]*100)).format(team2=team2)+"%"
 
-    submit = pd.read_csv('sample_submission.csv')
-    submit.pred = submit.id.apply(lambda x: a.process_tournament(x,a.LR))
-    submit.to_csv('submission_LR.csv',index=False)
-    submit.pred = submit.id.apply(lambda x: a.process_tournament(x,a.SVC))
-    submit.to_csv('submission_SVC.csv',index=False)
+    #submit = pd.read_csv('sample_submission.csv')
+    #submit.pred = submit.id.apply(lambda x: a.process_tournament(x,a.LR))
+    #submit.to_csv('submission_LR.csv',index=False)
+    #submit.pred = submit.id.apply(lambda x: a.process_tournament(x,a.SVC))
+    #submit.to_csv('submission_SVC.csv',index=False)
